@@ -1,71 +1,66 @@
 import { Request, Response } from "express"
-
-let todos = [
-    { id: 1, text: 'Buy Milk', completedAt: new Date() },
-    { id: 2, text: 'Buy Rice', completedAt: null },
-    { id: 3, text: 'Buy Beans', completedAt: new Date() },
-]
+import { prisma } from "../../data/postgres"
+import { CreateTodoDto, UpdateTodoDto } from "../../domain/dtos"
 
 export class TodosController {
 
     // Dependency Injection
     constructor() {}
 
-    public getTodos = ( req: Request, res: Response ) => {
+    public getTodos = async ( req: Request, res: Response ) => {
 
-        return res.json(todos)
+        const todo = await prisma.todo.findMany()
+        return res.json( todo )
     }
 
-    public getTodoById = ( req: Request, res: Response ) => {
+    public getTodoById = async ( req: Request, res: Response ) => {
         const id = +req.params.id
         if ( isNaN(id) ) return res.status(400).json({ error: 'ID argument is not a number'})
-        const todo = todos.find( todo => todo.id === id );
+        const todo = await prisma.todo.findUnique({ where: { id } });
         
         ( todo ) ? res.json(todo) : res.status(404).json({ msg: `Todo with id: ${id} not found` })
     }
 
-    public createTodo = ( req: Request, res: Response ) => {
+    public createTodo = async ( req: Request, res: Response ) => {
         
-        const { text } = req.body
-        if ( !text ) return res.status(400).json({ error: 'Text Property is Required'})
-        
-        const newTodo = {
-            id: todos.length + 1,
-            text,
-            completedAt: null
-        }
-        todos.push(newTodo)
+        const [ error, createTodoDto ] = CreateTodoDto.create(req.body)
+        if ( error ) return res.status(400).json({ error });
 
-        res.json(newTodo)
+        const todo = await prisma.todo.create({
+            data: createTodoDto!
+        })
+
+        res.json( todo )
     }
 
-    public updateTodo = ( req: Request, res: Response ) => {
-    
-        const id = +req.params.id
-        if ( isNaN(id) ) return res.status(400).json({ error: 'ID argument is not a number' });
-        
-        const todo = todos.find(todo => todo.id === id);
-        if ( !todo ) return res.status(404).json({ error: `Todo whith ID ${ id } not found` });
+    public updateTodo = async (req: Request, res: Response) => {
+        const id = +req.params.id;
+        const [ error, updatedTodoDto ] = UpdateTodoDto.update({
+            ...req.body,
+            id
+        })
+        if ( error ) return res.status(400).json({ error })
 
-        const { text, completedAt } = req.body
+        const todo = await prisma.todo.findUnique({ where: { id } });
+        if (!todo) return res.status(404).json({ error: `Todo with ID ${id} not found` });
 
-        todo.text = text || todo.text;
-        ( completedAt === null ) 
-            ? todo.completedAt = null 
-            : todo.completedAt = new Date( completedAt || todo.completedAt )
-        res.json(todo) // Referencia
-    }
+        const updatedTodo = await prisma.todo.update({
+            where: { id },
+            data: updatedTodoDto!.values
+        });
 
-    public deleteTodo = ( req: Request, res: Response ) => {
-        
-        const id = +req.params.id
-        const initialLength = todos.length;
-        todos = todos.filter(todo => todo.id !== id);
+        res.json(updatedTodo); // Devuelve el registro actualizado
+    };
 
-        if (todos.length === initialLength) {
-            return res.status(404).json({ error: `Todo with ID ${id} not found` });
-        }
+    public deleteTodo = async (req: Request, res: Response) => {
+        const id = +req.params.id;
+        if (isNaN(id)) return res.status(400).json({ error: 'ID argument is not a number' });
 
-        res.json({ msg: 'Delete successful...' });
+        const todo = await prisma.todo.findUnique({ where: { id } });
+        if (!todo) return res.status(404).json({ error: `Todo with ID ${id} not found` });
+
+        await prisma.todo.delete({ where: { id } });
+
+        res.json({ msg: 'Delete successful...' , todo }); // Devuelve el mensaje de eliminación y el "todo" eliminado
     }
 }
