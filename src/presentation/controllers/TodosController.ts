@@ -1,66 +1,62 @@
 import { Request, Response } from "express"
-import { prisma } from "../../data/postgres"
-import { CreateTodoDto, UpdateTodoDto } from "../../domain/dtos"
+import { CreateTodoDto, UpdateTodoDto,TodoRepository, GetAllTodos, GetTodo, CreateTodo, UpdateTodo, DeleteTodo } from "../../domain"
 
 export class TodosController {
 
     // Dependency Injection
-    constructor() {}
+    constructor(
+        private readonly todoRepository: TodoRepository
+    ){}
 
-    public getTodos = async ( req: Request, res: Response ) => {
-
-        const todo = await prisma.todo.findMany()
-        return res.json( todo )
+    public getTodos = ( req: Request, res: Response ) => {
+        new GetAllTodos( this.todoRepository )
+            .execute()
+            .then( todos => res.json( todos ))
+            .catch( error => res.status(400).json({ error }))
     }
 
-    public getTodoById = async ( req: Request, res: Response ) => {
+    public getTodoById = ( req: Request, res: Response ) => {
         const id = +req.params.id
-        if ( isNaN(id) ) return res.status(400).json({ error: 'ID argument is not a number'})
-        const todo = await prisma.todo.findUnique({ where: { id } });
-        
-        ( todo ) ? res.json(todo) : res.status(404).json({ msg: `Todo with id: ${id} not found` })
+        if (isNaN(id)) return res.status(400).json({ error: 'ID argument is not a number' })
+        new GetTodo( this.todoRepository )
+            .execute( id )
+            .then( todo => res.json( todo ))
+            .catch( error => res.status(400).json({ error }))
     }
 
-    public createTodo = async ( req: Request, res: Response ) => {
+    public createTodo = ( req: Request, res: Response ) => {
         
         const [ error, createTodoDto ] = CreateTodoDto.create(req.body)
         if ( error ) return res.status(400).json({ error });
 
-        const todo = await prisma.todo.create({
-            data: createTodoDto!
-        })
-
-        res.json( todo )
+        new CreateTodo( this.todoRepository )
+            .execute( createTodoDto! )
+            .then( todo => res.json( todo ))
+            .catch( error => res.status(400).json( error ))
     }
 
-    public updateTodo = async (req: Request, res: Response) => {
-        const id = +req.params.id;
+    public updateTodo = (req: Request, res: Response) => {
+        const id = +req.params.id
+        if (isNaN(id)) return res.status(400).json({ error: 'ID argument is not a number' })
         const [ error, updatedTodoDto ] = UpdateTodoDto.update({
             ...req.body,
             id
         })
         if ( error ) return res.status(400).json({ error })
 
-        const todo = await prisma.todo.findUnique({ where: { id } });
-        if (!todo) return res.status(404).json({ error: `Todo with ID ${id} not found` });
+        new UpdateTodo( this.todoRepository )
+            .execute( updatedTodoDto! )
+            .then( todo => res.json( todo ))
+            .catch( error => res.status(400).json({ error }))
+    }
 
-        const updatedTodo = await prisma.todo.update({
-            where: { id },
-            data: updatedTodoDto!.values
-        });
-
-        res.json(updatedTodo); // Devuelve el registro actualizado
-    };
-
-    public deleteTodo = async (req: Request, res: Response) => {
+    public deleteTodo = (req: Request, res: Response) => {
         const id = +req.params.id;
-        if (isNaN(id)) return res.status(400).json({ error: 'ID argument is not a number' });
+        if (isNaN(id)) return res.status(400).json({ error: 'ID argument is not a number' })
 
-        const todo = await prisma.todo.findUnique({ where: { id } });
-        if (!todo) return res.status(404).json({ error: `Todo with ID ${id} not found` });
-
-        await prisma.todo.delete({ where: { id } });
-
-        res.json({ msg: 'Delete successful...' , todo }); // Devuelve el mensaje de eliminación y el "todo" eliminado
+        new DeleteTodo( this.todoRepository )
+            .execute( id )
+            .then( todo => res.json( todo ))
+            .catch( error => res.status(400).json({ error }))
     }
 }
